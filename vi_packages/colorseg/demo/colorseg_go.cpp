@@ -114,15 +114,16 @@ void offscaleFix(Segmentator<ColorVertex> & segmentator, double threshold)
             continue;
 
           Edge * edge = 0;
-          for (auto it3 = v2->begin(); it3 != v2->end(); it3++)
+          for (auto it3 = v2->begin(); it3 != v2->end(); it3++) {
             if (dynamic_cast<ColorVertex*>(it3->vertex) == v1)
               edge = it3->edge;
+          }
 
-            if (edge == 0)
-              continue;
+          if (edge == 0)
+            continue;
 
-            if (!isLTCluster(v1, v2))
-              continue;
+          if (!isLTCluster(v1, v2))
+            continue;
 
           merged.insert(segmentator.getId(v1));
           merged.insert(segmentator.getId(v2));
