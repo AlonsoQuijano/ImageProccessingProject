@@ -23,10 +23,10 @@ target_link_libraries(roadseg
 
 #----------------demo---------------------------------------
 
-# if (Boost_FOUND AND OpenCV_FOUND)
-#   add_executable(roadseg_go demo/roadseg_go.cpp)
-#   target_link_libraries(roadseg_go
-#     ${Boost_LIBRARIES}
-#     ${OpenCV_LIBS}
-#     roadseg)
-# endif()
+if (Boost_FOUND AND OpenCV_FOUND)
+  add_executable(roadseg_go demo/roadseg_go.cpp)
+  target_link_libraries(roadseg_go
+    ${Boost_LIBRARIES}
+    ${OpenCV_LIBS}
+    roadseg)
+endif()

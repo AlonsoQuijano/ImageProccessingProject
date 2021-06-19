@@ -27,7 +27,7 @@ namespace roadseg
 
   RoadVertex::~RoadVertex()
   {
-    if (coordsSumOfSquares != NULL)
+    if (coordsSumOfSquares != nullptr)
     {
       for (int i = 0; i < COORDS_NUM; i++)
         delete[] coordsSumOfSquares[i];

@@ -31,7 +31,7 @@ public:
 
   RoadVertex() :
     Vertex()
-  , coordsSumOfSquares(0)
+  , coordsSumOfSquares(nullptr)
   , needToUpdate(false)
   {}
 
