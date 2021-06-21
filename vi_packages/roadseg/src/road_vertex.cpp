@@ -7,7 +7,7 @@
 namespace roadseg
 {
 
-  double RoadVertex::maxFirstEigValThresh = 1;
+  double RoadVertex::maxFirstEigValThresh = 0.1f;
 
   const int COORDS_NUM = 3;
 
@@ -15,8 +15,10 @@ namespace roadseg
       : Vertex(v)
   {
     coordsSumOfSquares = new long double *[COORDS_NUM];
+    coordsSum = new long double [COORDS_NUM];
     for (int i = 0; i < COORDS_NUM; i++)
     {
+      coordsSum[i] = v->coordsSum[i];
       coordsSumOfSquares[i] = new long double[COORDS_NUM];
       for (int j = 0; j < COORDS_NUM; j++)
         coordsSumOfSquares[i][j] = v->coordsSumOfSquares[i][j];
@@ -27,6 +29,10 @@ namespace roadseg
 
   RoadVertex::~RoadVertex()
   {
+    if (coordsSum != nullptr)
+    {
+      delete[] coordsSum;
+    }
     if (coordsSumOfSquares != nullptr)
     {
       for (int i = 0; i < COORDS_NUM; i++)
@@ -40,8 +46,10 @@ namespace roadseg
     Vertex::Initialize(_channelsNum);
 
     coordsSumOfSquares = new long double *[COORDS_NUM];
+    coordsSum = new long double[COORDS_NUM];
     for (int i = 0; i < COORDS_NUM; i++)
     {
+      coordsSum[i] = 0;
       coordsSumOfSquares[i] = new long double[COORDS_NUM];
       for (int j = 0; j < COORDS_NUM; j++)
         coordsSumOfSquares[i][j] = 0;
@@ -50,15 +58,19 @@ namespace roadseg
 
   void RoadVertex::update(const uint8_t *pix)
   {
-    double pixd[3] = {(double)pix[0], (double)pix[1], (double)pix[2]};
-    Vertex::update(pixd);
+    auto fpix = reinterpret_cast<const float *>(pix);
+    double pixd[3] = {(double)fpix[0], (double)fpix[1], (double)fpix[2]};
+
+    Vertex::update(pix);
 
     Eigen::Vector3d pix_vec(pixd[0], pixd[1], pixd[2]);
     Eigen::Matrix3d pix_sq_mat = pix_vec * pix_vec.transpose();
     for (int i = 0; i < COORDS_NUM; ++i)
+    {
+      coordsSum[i] += (long double)pix_vec[i];
       for (int j = 0; j < COORDS_NUM; ++j)
         coordsSumOfSquares[i][j] += (long double)pix_sq_mat(i, j);
-
+    }
     needToUpdate = true;
   }
 
@@ -68,8 +80,11 @@ namespace roadseg
 
     RoadVertex *cv = dynamic_cast<RoadVertex *>(v);
     for (int i = 0; i < COORDS_NUM; i++)
+    {
+      coordsSum[i] += cv->coordsSum[i];
       for (int j = 0; j < COORDS_NUM; j++)
         coordsSumOfSquares[i][j] += cv->coordsSumOfSquares[i][j];
+    }
 
     needToUpdate = true;
   }
@@ -87,7 +102,7 @@ namespace roadseg
 
     // calculate mean and covariance matrix
     {
-      Eigen::Vector3d sum(channelsSum[0], channelsSum[1], channelsSum[2]);
+      Eigen::Vector3d sum(coordsSum[0], coordsSum[1], coordsSum[2]);
       Eigen::Matrix3d sumSquares;
       for (int i = 0; i < COORDS_NUM; ++i)
         for (int j = 0; j < COORDS_NUM; ++j)

@@ -1,3 +1,5 @@
 .vscode*
 build*
 *.ipynb_checkpoints*
+
+*Data/Res*

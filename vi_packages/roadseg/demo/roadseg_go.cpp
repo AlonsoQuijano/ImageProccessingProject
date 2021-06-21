@@ -34,7 +34,9 @@ using namespace roadseg;
 void prepare_image(mximg::PImage &xyz_mximage, std::string const &depth_img_path)
 {
   cv::Mat cv_depth_image = cv::imread(depth_img_path, cv::IMREAD_ANYDEPTH);
-  cv::Mat cv_xyz_image = cv::Mat::zeros(cv_depth_image.rows, cv_depth_image.cols, CV_32FC3);
+  // cv::Mat cv_xyz_image = cv::Mat::zeros(cv_depth_image.rows, cv_depth_image.cols, CV_32FC3);
+  DECLARE_GUARDED_MINIMG(xyz_image);
+  NewMinImagePrototype(&xyz_image, cv_depth_image.cols, cv_depth_image.rows, 12, MinTyp::TYP_UINT8);
   if (cv_depth_image.type() != CV_16U)
   {
     throw std::runtime_error("Wrong depth image format. Expected image's type to be uint16_t");
@@ -52,20 +54,22 @@ void prepare_image(mximg::PImage &xyz_mximage, std::string const &depth_img_path
     for (int j = 0; j < cv_depth_image.cols; ++j)
     {
       auto depth = cv_depth_image.at<ushort>(i, j);
+      float x = 0;
+      float y = 0;
+      float z = 0;
       if (depth > 0)
       {
-        float z = depth / 1000.;
-        float x = z * (j - cx) / fx;
-        float y = z * (i - cy) / fy;
-        auto vec = cv_xyz_image.ptr<float>(i, j);
-        vec[0] = x;
-        vec[1] = y;
-        vec[2] = z;
+        z = depth / 1000.;
+        x = z * (j - cx) / fx;
+        y = z * (i - cy) / fy;
       }
+      GetMinImageLineAs<float>(&xyz_image, i)[j * 3] = x;
+      GetMinImageLineAs<float>(&xyz_image, i)[j * 3 + 1] = y;
+      GetMinImageLineAs<float>(&xyz_image, i)[j * 3 + 2] = z;
     }
-  cv::normalize(cv_xyz_image, cv_xyz_image, 0, 255, cv::NORM_MINMAX, CV_8UC3);
-  cv::imwrite(data_path.parent_path().append("xyz_0_255.png").string(), cv_xyz_image);
-  xyz_mximage = mximg::createByCopy(cv_xyz_image);
+  // cv::normalize(cv_xyz_image, cv_xyz_image, 0, 255, cv::NORM_MINMAX, CV_8UC3);
+  // cv::imwrite(data_path.parent_path().append("xyz_0_255.png").string(), cv_xyz_image);
+  xyz_mximage = mximg::createByOwning(xyz_image);
 }
 
 int main(int argc, const char *argv[])
@@ -81,7 +85,7 @@ int main(int argc, const char *argv[])
   TCLAP::SwitchArg debug("d", "debug", "debug mode", cmd, false);
   TCLAP::ValueArg<int> debugIter("i", "debug_iter", "debug iterations", false, 1, "int", cmd);
   TCLAP::ValueArg<int> maxSegments("s", "max_segments", "max segments for debug output", false, -1, "int", cmd);
-  TCLAP::ValueArg<double> maxEigVal("v", "max_eigen_val", "maximum eigen val to consider region as a plane", false, 1, "double", cmd);
+  TCLAP::ValueArg<double> maxEigVal("v", "max_eigen_val", "maximum eigen val to consider region as a plane", false, -1, "double", cmd);
 
   cmd.parse(argc, argv);
 
@@ -126,7 +130,7 @@ int main(int argc, const char *argv[])
       }
     }
 
-    segmentatorPlanes.mergeToLimit(-1, errorLimit.getValue(), segmentsLimit.getValue(),
+    segmentatorPlanes.mergeToLimit(maxEigVal.getValue(), errorLimit.getValue(), segmentsLimit.getValue(),
                                    dbg, debugIter.getValue(), maxSegments.getValue());
 
     const ImageMap &imageMap = segmentatorPlanes.getImageMap();

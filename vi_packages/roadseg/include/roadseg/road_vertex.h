@@ -18,6 +18,7 @@ namespace roadseg {
 class RoadVertex : public Vertex
 {
 public:
+  long double *coordsSum;
   long double **coordsSumOfSquares;
 
   struct HelperStats
@@ -31,6 +32,7 @@ public:
 
   RoadVertex() :
     Vertex()
+  , coordsSum(nullptr)
   , coordsSumOfSquares(nullptr)
   , needToUpdate(false)
   {}
