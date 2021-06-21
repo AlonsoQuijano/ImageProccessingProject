@@ -519,6 +519,13 @@ int Segmentator<T>::mergeToLimitCycle(EdgeValue distanceLimit, EdgeValue errorLi
                 dist_to_string(std::sqrt(errorAccumulator / N)) + "_" +
                 dist_to_string(dist) + "_" +
                 std::to_string(vertexNum), "segm", &vis, "");
+
+      std::cout << std::to_string(i) + "_" +
+                   dist_to_string(std::sqrt(errorAccumulator / N)) + "_" +
+                   dist_to_string(dist) + "_" +
+                   std::to_string(vertexNum)
+                << " -- real_dist_val :" << dist
+                << " real_error_val :" << errorAccumulator << std::endl;
     }
     i++;
   }
@@ -681,7 +688,7 @@ void Segmentator<T>::merge(T *absorbent, T *v)
 
   	// LOG_INFO(absorbent-vertices << " has absorbed " << v-vertices << " (distance " << dist << ")");
 
-  assert(connected);	// объединяемые вершины должны были быть соединены
+   assert(connected);	// объединяемые вершины должны были быть соединены
 
   vertexNum--;
   needUpdateMapping = true;

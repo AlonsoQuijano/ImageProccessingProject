@@ -7,7 +7,7 @@
 namespace roadseg
 {
 
-  double RoadVertex::maxFirstEigValThresh = 0.1f;
+  double RoadVertex::maxFirstEigValThresh = 5.f;
 
   const int COORDS_NUM = 3;
 
@@ -61,15 +61,17 @@ namespace roadseg
     auto fpix = reinterpret_cast<const float *>(pix);
     double pixd[3] = {(double)fpix[0], (double)fpix[1], (double)fpix[2]};
 
+    bool not_real_point = (std::abs(fpix[2]) < 1e-8f);
+
     Vertex::update(pix);
 
     Eigen::Vector3d pix_vec(pixd[0], pixd[1], pixd[2]);
     Eigen::Matrix3d pix_sq_mat = pix_vec * pix_vec.transpose();
     for (int i = 0; i < COORDS_NUM; ++i)
     {
-      coordsSum[i] += (long double)pix_vec[i];
+      coordsSum[i] = not_real_point ? std::numeric_limits<double>::infinity() : coordsSum[i] + (long double)pix_vec[i];
       for (int j = 0; j < COORDS_NUM; ++j)
-        coordsSumOfSquares[i][j] += (long double)pix_sq_mat(i, j);
+        coordsSumOfSquares[i][j] = not_real_point ? std::numeric_limits<double>::infinity() : coordsSumOfSquares[i][j] + (long double)pix_sq_mat(i, j);
     }
     needToUpdate = true;
   }

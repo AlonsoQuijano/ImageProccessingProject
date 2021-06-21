@@ -11,6 +11,6 @@ EdgeValue criteria(const RoadVertex *v1, const RoadVertex *v2);
 
 EdgeValue error(const RoadVertex *v);
 
-bool isParallel(const RoadVertex *v1, const RoadVertex *v2);
+bool isUnionLowVariance(const RoadVertex *v1, const RoadVertex *v2);
 
 }	// ns roadseg

@@ -38,6 +38,8 @@ either expressed or implied, of copyright holders.
 #include <cmath>
 #include <algorithm>
 
+#include <iostream>
+
 THIRDPARTY_INCLUDES_BEGIN
 #include <Eigen/Geometry>
 THIRDPARTY_INCLUDES_END
@@ -70,7 +72,7 @@ EdgeValue error(const RoadVertex *v) {
   return err * v->area;
 }
 
-bool isParallel(const RoadVertex *v1, const RoadVertex *v2)
+bool isUnionLowVariance(const RoadVertex *v1, const RoadVertex *v2)
 {
   RoadVertex v1cp(v1);
   RoadVertex v2cp(v2);
@@ -81,13 +83,17 @@ bool isParallel(const RoadVertex *v1, const RoadVertex *v2)
 
 EdgeValue criteria(const RoadVertex *v1, const RoadVertex *v2)
 {
-  if (!isParallel(v1, v2))
+  if (!isUnionLowVariance(v1, v2))
     return std::numeric_limits<double>::infinity();
 
   RoadVertex v(v1);
   RoadVertex tmp(v2);
   v.absorb(&tmp);
-  return std::sqrt(error(&v) - error(v1) - error(v2));
+  auto err_diff = error(&v) - error(v1) - error(v2);
+  if (err_diff < 0) { // possible if points fit plane exact precisely
+    return 0;
+  }
+  return std::sqrt(err_diff);
 }
 
 } // ns roadseg

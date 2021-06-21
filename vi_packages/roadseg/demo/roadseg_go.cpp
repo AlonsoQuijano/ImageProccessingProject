@@ -34,8 +34,8 @@ using namespace roadseg;
 void prepare_image(mximg::PImage &xyz_mximage, std::string const &depth_img_path)
 {
   cv::Mat cv_depth_image = cv::imread(depth_img_path, cv::IMREAD_ANYDEPTH);
-  // cv::Mat cv_xyz_image = cv::Mat::zeros(cv_depth_image.rows, cv_depth_image.cols, CV_32FC3);
   DECLARE_GUARDED_MINIMG(xyz_image);
+  // 12-channels hack to write 3-channel 32-bit float image as uint_8 one
   NewMinImagePrototype(&xyz_image, cv_depth_image.cols, cv_depth_image.rows, 12, MinTyp::TYP_UINT8);
   if (cv_depth_image.type() != CV_16U)
   {
@@ -67,9 +67,93 @@ void prepare_image(mximg::PImage &xyz_mximage, std::string const &depth_img_path
       GetMinImageLineAs<float>(&xyz_image, i)[j * 3 + 1] = y;
       GetMinImageLineAs<float>(&xyz_image, i)[j * 3 + 2] = z;
     }
-  // cv::normalize(cv_xyz_image, cv_xyz_image, 0, 255, cv::NORM_MINMAX, CV_8UC3);
-  // cv::imwrite(data_path.parent_path().append("xyz_0_255.png").string(), cv_xyz_image);
   xyz_mximage = mximg::createByOwning(xyz_image);
+}
+
+
+Eigen::Vector3d get_eigen_vector(RoadVertex* vertex) {
+  auto hs =  vertex->getHelperStats();
+  hs.eigSolver.compute(hs.covariance);
+  return hs.eigSolver.eigenvectors().col(0);
+}
+
+bool check_angles(RoadVertex* a, RoadVertex* b, float cos_angle_thresh) {
+  auto vec_a = get_eigen_vector(a);
+  auto vec_b = get_eigen_vector(b);
+
+  return std::abs(vec_a.dot(vec_b)) > cos_angle_thresh;
+}
+
+bool check_segment_is_plane(RoadVertex *vertex)
+{
+  auto hs = vertex->getHelperStats();
+  auto eig_vals = hs.eigenvalues();
+  const float EPS = 1e-7f;
+  return (eig_vals[1] > 1e-7f) && (eig_vals[0] / eig_vals[1] < 0.01); // no points or lines segments to merge
+}
+
+void prepare_merge_list(std::vector<std::vector<SegmentID>> &segments_to_merge, Segmentator<RoadVertex> &segmentator, float max_angle) {
+  auto image_map = segmentator.getImageMap();
+  auto stats = image_map.getSegmentStats();
+  std::vector<bool> segments_to_check(image_map.getWidth() * image_map.getHeight(), false);
+  for (int i = 0; i < image_map.getHeight(); ++i)
+    for (int j = 0; j < image_map.getWidth(); ++j){
+      auto id = image_map.getSegment({j, i});
+      if (check_segment_is_plane(segmentator.vertexById(id))) {
+        segments_to_check[id] = true;
+      }
+    }
+  auto cos_angle_thresh = cos(max_angle);
+
+  auto last_segment_checked = std::find(segments_to_check.begin(), segments_to_check.end(), true);
+  while (last_segment_checked != segments_to_check.end())
+  {
+    int start_id = last_segment_checked - segments_to_check.begin();
+    segments_to_merge.push_back({start_id});
+    segments_to_check[start_id] = false;
+
+    std::queue<SegmentID> bfs_ids;
+    bfs_ids.emplace(start_id);
+    while (bfs_ids.size())
+    {
+      auto checking_id = bfs_ids.front();
+      bfs_ids.pop();
+      for (auto const& neighbour_id : stats[checking_id].neighbours) {
+        if (!segments_to_check[neighbour_id]) {
+          continue;
+        }
+        if (check_angles(segmentator.vertexById(checking_id), segmentator.vertexById(neighbour_id), cos_angle_thresh)) {
+          segments_to_merge.back().emplace_back(neighbour_id);
+          segments_to_check[neighbour_id] = false;
+          bfs_ids.emplace(neighbour_id);
+        }
+      }
+    }
+    last_segment_checked = std::find(last_segment_checked, segments_to_check.end(), true);
+  }
+}
+
+void merge_planes(Segmentator<RoadVertex> &segmentator, float max_angle, i8r::PLogger & dbg)
+{
+  std::vector<std::vector<SegmentID>> segments_to_merge;
+  prepare_merge_list(segments_to_merge, segmentator, max_angle);
+  for (size_t i = 0; i < segments_to_merge.size(); ++i) {
+    if (segments_to_merge[i].size() < 2) {
+      continue;
+    }
+    auto absorbent_vertex = segmentator.vertexById(segments_to_merge[i][0]);
+    for (size_t j = 1; j < segments_to_merge[i].size(); ++j) {
+      auto vertex = segmentator.vertexById(segments_to_merge[i][j]);
+      segmentator.merge(absorbent_vertex, vertex);
+    }
+    if (dbg->enabled()) {
+      segmentator.updateMapping();
+      DECLARE_GUARDED_MINIMG(vis);
+      visualize(&vis, segmentator.getImageMap());
+      dbg->save(std::to_string(i), "plane_merging", &vis, "");
+    }
+  }
+  segmentator.updateMapping();
 }
 
 int main(int argc, const char *argv[])
@@ -85,7 +169,8 @@ int main(int argc, const char *argv[])
   TCLAP::SwitchArg debug("d", "debug", "debug mode", cmd, false);
   TCLAP::ValueArg<int> debugIter("i", "debug_iter", "debug iterations", false, 1, "int", cmd);
   TCLAP::ValueArg<int> maxSegments("s", "max_segments", "max segments for debug output", false, -1, "int", cmd);
-  TCLAP::ValueArg<double> maxEigVal("v", "max_eigen_val", "maximum eigen val to consider region as a plane", false, -1, "double", cmd);
+  TCLAP::ValueArg<double> maxEigVal("v", "max_eigen_val", "maximum eigen val to consider region as a plane", false, 0.1, "double", cmd);
+  TCLAP::ValueArg<double> maxAngle("a", "max_angle", "maximum angle to consider ", false, 0, "double", cmd);
 
   cmd.parse(argc, argv);
 
@@ -129,10 +214,12 @@ int main(int argc, const char *argv[])
         }
       }
     }
+    segmentatorPlanes.updateMapping();
 
-    segmentatorPlanes.mergeToLimit(maxEigVal.getValue(), errorLimit.getValue(), segmentsLimit.getValue(),
+    segmentatorPlanes.mergeToLimit(-1, errorLimit.getValue(), segmentsLimit.getValue(),
                                    dbg, debugIter.getValue(), maxSegments.getValue());
 
+    merge_planes(segmentatorPlanes, maxAngle.getValue(), dbg);
     const ImageMap &imageMap = segmentatorPlanes.getImageMap();
 
     DECLARE_GUARDED_MINIMG(imgres);
