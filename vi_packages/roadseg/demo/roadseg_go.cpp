@@ -156,6 +156,35 @@ void merge_planes(Segmentator<RoadVertex> &segmentator, float max_angle, i8r::PL
   segmentator.updateMapping();
 }
 
+
+void save_mask(Segmentator<RoadVertex> const& segmentator, std::string const& basename, std::string const& output) {
+  SegmentStat max_area_vertex;
+  SegmentID max_id = 0;
+  const auto map = segmentator.getImageMap();
+  const auto stats = map.getSegmentStats();
+  int total_area_sum = 0;
+  const int max_area = map.getWidth() * map.getHeight();
+  for (auto const& stat : stats) {
+    if (!total_area_sum || stat.second.area > max_area_vertex.area) {
+      max_id = stat.first;
+      max_area_vertex = stat.second;
+    }
+    total_area_sum += stat.second.area;
+    if (total_area_sum >  max_area - max_area_vertex.area) {
+      break;
+    }
+  }
+
+  cv::Mat mask(map.getHeight(), map.getWidth(), CV_8UC1);
+  for (int i = 0; i < map.getHeight(); ++i) {
+    for (int j = 0; j < map.getWidth(); ++j) {
+      mask.at<uchar>(i, j) =  (map.getSegment(j , i) == max_id) ? UINT_MAX : 0;
+    }
+  }
+  std::string const mask_filename = bfs::absolute(basename + "_mask.png", output).string();
+  cv::imwrite(mask_filename, mask);
+}
+
 int main(int argc, const char *argv[])
 {
   i8r::AutoShutdown i8r_shutdown;
@@ -225,6 +254,7 @@ int main(int argc, const char *argv[])
     DECLARE_GUARDED_MINIMG(imgres);
     visualize(&imgres, imageMap);
     THROW_ON_MINERR(SaveMinImage(imgres_filename.c_str(), &imgres));
+    save_mask(segmentatorPlanes, basename, output.getValue());
   }
   catch (std::exception const &e)
   {
